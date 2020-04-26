@@ -1,0 +1,151 @@
+src/wfw-wfw.o: ../src/wfw.c ../src/conf.h ../src/hash.h \
+ /usr/include/unistd.h /usr/include/amd64/ansi.h /usr/include/sys/cdefs.h \
+ /usr/include/amd64/cdefs.h /usr/include/sys/cdefs_elf.h \
+ /usr/include/amd64/int_types.h /usr/include/sys/common_int_types.h \
+ /usr/include/sys/featuretest.h /usr/include/sys/types.h \
+ /usr/include/amd64/types.h /usr/include/sys/ansi.h \
+ /usr/include/amd64/endian.h /usr/include/sys/endian.h \
+ /usr/include/amd64/endian_machdep.h /usr/include/amd64/bswap.h \
+ /usr/include/amd64/byte_swap.h /usr/include/sys/bswap.h \
+ /usr/include/sys/stdint.h /usr/include/amd64/int_mwgwtypes.h \
+ /usr/include/sys/common_int_mwgwtypes.h /usr/include/amd64/int_limits.h \
+ /usr/include/sys/common_int_limits.h /usr/include/amd64/int_const.h \
+ /usr/include/amd64/wchar_limits.h /usr/include/sys/fd_set.h \
+ /usr/include/pthread_types.h /usr/include/sys/unistd.h \
+ /usr/include/sys/null.h /usr/include/stdbool.h /usr/include/stdio.h \
+ /usr/include/arpa/inet.h /usr/include/netinet/in.h \
+ /usr/include/netinet6/in6.h /usr/include/sys/socket.h \
+ /usr/include/sys/uio.h /usr/include/sys/sigtypes.h /usr/include/fcntl.h \
+ /usr/include/ifaddrs.h /usr/include/net/if.h /usr/include/sys/queue.h \
+ /usr/include/sys/mutex.h /usr/include/sys/inttypes.h \
+ /usr/include/amd64/int_fmtio.h /usr/include/amd64/mutex.h \
+ /usr/include/x86/mutex.h /usr/include/net/dlt.h /usr/include/net/pfil.h \
+ /usr/include/altq/if_altq.h /usr/include/sys/time.h \
+ /usr/include/sys/timespec.h /usr/include/sys/select.h \
+ /usr/include/time.h /usr/include/sys/idtype.h /usr/include/net/if_arp.h \
+ /usr/include/netdb.h /usr/include/inttypes.h /usr/include/stdarg.h \
+ /usr/include/stdlib.h /usr/include/string.h /usr/include/strings.h
+
+../src/conf.h:
+
+../src/hash.h:
+
+/usr/include/unistd.h:
+
+/usr/include/amd64/ansi.h:
+
+/usr/include/sys/cdefs.h:
+
+/usr/include/amd64/cdefs.h:
+
+/usr/include/sys/cdefs_elf.h:
+
+/usr/include/amd64/int_types.h:
+
+/usr/include/sys/common_int_types.h:
+
+/usr/include/sys/featuretest.h:
+
+/usr/include/sys/types.h:
+
+/usr/include/amd64/types.h:
+
+/usr/include/sys/ansi.h:
+
+/usr/include/amd64/endian.h:
+
+/usr/include/sys/endian.h:
+
+/usr/include/amd64/endian_machdep.h:
+
+/usr/include/amd64/bswap.h:
+
+/usr/include/amd64/byte_swap.h:
+
+/usr/include/sys/bswap.h:
+
+/usr/include/sys/stdint.h:
+
+/usr/include/amd64/int_mwgwtypes.h:
+
+/usr/include/sys/common_int_mwgwtypes.h:
+
+/usr/include/amd64/int_limits.h:
+
+/usr/include/sys/common_int_limits.h:
+
+/usr/include/amd64/int_const.h:
+
+/usr/include/amd64/wchar_limits.h:
+
+/usr/include/sys/fd_set.h:
+
+/usr/include/pthread_types.h:
+
+/usr/include/sys/unistd.h:
+
+/usr/include/sys/null.h:
+
+/usr/include/stdbool.h:
+
+/usr/include/stdio.h:
+
+/usr/include/arpa/inet.h:
+
+/usr/include/netinet/in.h:
+
+/usr/include/netinet6/in6.h:
+
+/usr/include/sys/socket.h:
+
+/usr/include/sys/uio.h:
+
+/usr/include/sys/sigtypes.h:
+
+/usr/include/fcntl.h:
+
+/usr/include/ifaddrs.h:
+
+/usr/include/net/if.h:
+
+/usr/include/sys/queue.h:
+
+/usr/include/sys/mutex.h:
+
+/usr/include/sys/inttypes.h:
+
+/usr/include/amd64/int_fmtio.h:
+
+/usr/include/amd64/mutex.h:
+
+/usr/include/x86/mutex.h:
+
+/usr/include/net/dlt.h:
+
+/usr/include/net/pfil.h:
+
+/usr/include/altq/if_altq.h:
+
+/usr/include/sys/time.h:
+
+/usr/include/sys/timespec.h:
+
+/usr/include/sys/select.h:
+
+/usr/include/time.h:
+
+/usr/include/sys/idtype.h:
+
+/usr/include/net/if_arp.h:
+
+/usr/include/netdb.h:
+
+/usr/include/inttypes.h:
+
+/usr/include/stdarg.h:
+
+/usr/include/stdlib.h:
+
+/usr/include/string.h:
+
+/usr/include/strings.h:
