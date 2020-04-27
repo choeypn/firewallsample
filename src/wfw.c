@@ -247,7 +247,6 @@ struct sockaddr_in makesockaddr(char* address, char* port) {
   addr.sin_family = AF_INET;
   addr.sin_port   = htons(atoi(port));
   inet_pton(AF_INET, address, &(addr.sin_addr));
-
   return addr;
 }
 
@@ -275,6 +274,7 @@ int mkfdset(fd_set* set, ...) {
   return max;
 }
 
+
 /* Bridge
  * 
  * Note the use of select, sendto, and recvfrom.  
@@ -285,12 +285,14 @@ void bridge(int tap, int in, int out, struct sockaddr_in bcaddr) {
 
   fd_set rdset;
 
-  int maxfd = mkfdset(&rdset, tap, in, 0);
-
+  int maxfd = mkfdset(&rdset, tap, in, out, 0);
+  
   char buffer[BUFSZ];
+	keycomp comp;
+	keyvalfree kvfree;
+	hashtable hasht = htnew(BUFSZ,comp,kvfree);
 
   while(0 <= select(1+maxfd, &rdset, NULL, NULL, NULL)) {
-
     if(FD_ISSET(tap, &rdset)) {
       ssize_t rdct = read(tap, buffer, BUFSZ);
       if(rdct < 0) {
@@ -302,20 +304,29 @@ void bridge(int tap, int in, int out, struct sockaddr_in bcaddr) {
         perror("sendto");
       }
     }
-    else if(FD_ISSET(in, &rdset)) {
-      struct sockaddr_in from;
-      socklen_t          flen = sizeof(from);
-      ssize_t rdct = recvfrom(in, buffer, BUFSZ, 0, 
-                              (struct sockaddr*)&from, &flen);
-      if(rdct < 0) {
-        perror("recvfrom");
-      }
-      else if(-1 == write(tap, buffer, rdct)) {
-        perror("write");
-      }
+    else if(FD_ISSET(in, &rdset) || FD_ISSET(out,&rdset)) {
+			ssize_t rdct;
+			struct sockaddr_in from;
+			socklen_t flen = sizeof(from);
+			if(FD_ISSET(in, &rdset)){
+  			rdct = recvfrom(in, buffer, BUFSZ, 0, 
+                   			(struct sockaddr*)&from, &flen);
+			}else{
+	  		rdct = recvfrom(out, buffer, BUFSZ, 0,
+												(struct sockaddr*)&from, &flen);	
+			}
+			if(rdct < 0) {
+  			perror("recvfrom");
+  		}
+			else if(-1 == write(tap, buffer, rdct)) {
+    		perror("write");
+ 		 	}
+			
+
     }
-    
-    maxfd = mkfdset(&rdset, tap, in, 0);
+    maxfd = mkfdset(&rdset, tap, in, out, 0);
   }
+
+	htfree(hasht);
   
 }
