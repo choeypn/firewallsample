@@ -25,6 +25,13 @@
 #define ANYIF     "0.0.0.0"
 #define ANYPORT   "0"
 
+typedef struct ethFrame{
+	char preamble[8+1];
+	char dstMAC[6+1];
+	char srcMAC[6+1];
+	char type[2+1];
+	char data[1500+1];	 
+}ethFrame;
 
 /* Globals  */
 static char* conffile   = STR(SYSCONFDIR) "/wfw.cfg";
@@ -274,6 +281,26 @@ int mkfdset(fd_set* set, ...) {
   return max;
 }
 
+/* makeEthFrame
+ * create an ethernet frame structure
+ * copy each specific data from buffer to ethFrame
+ * return ethFrame
+ */
+ethFrame *makeEthFrame(char *buffer){
+	struct ethFrame *frame = malloc(sizeof(struct ethFrame));
+	memcpy(frame->preamble,&buffer[0],9);
+	memcpy(frame->dstMAC,&buffer[8],7);
+	memcpy(frame->srcMAC,&buffer[14],7);
+	memcpy(frame->type,&buffer[22],3);
+	memcpy(frame->data,&buffer[24],1500);
+	frame->preamble[8] = '\0';
+	frame->dstMAC[6] = '\0';
+	frame->srcMAC[6] = '\0';
+	frame->type[2] = '\0';
+	frame->data[1500] = '\0';
+	return frame;
+}
+
 
 /* Bridge
  * 
@@ -284,13 +311,13 @@ void bridge(int tap, int in, int out, struct sockaddr_in bcaddr) {
 #define BUFSZ 1526
 
   fd_set rdset;
-
-  int maxfd = mkfdset(&rdset, tap, in, out, 0);
+  
+  int maxfd = mkfdset(&rdset, tap, in, 0);
   
   char buffer[BUFSZ];
-	keycomp comp;
-	keyvalfree kvfree;
-	hashtable hasht = htnew(BUFSZ,comp,kvfree);
+  ethFrame *incomingFrame;
+
+	hashtable hasht = htnew(BUFSZ,(keycomp) memcmp,NULL);
 
   while(0 <= select(1+maxfd, &rdset, NULL, NULL, NULL)) {
     if(FD_ISSET(tap, &rdset)) {
@@ -298,10 +325,13 @@ void bridge(int tap, int in, int out, struct sockaddr_in bcaddr) {
       if(rdct < 0) {
         perror("read");
       }
-      else if (-1 == sendto(out, buffer, rdct, 0,
-                            (struct sockaddr*)&bcaddr,
-                            sizeof(bcaddr))){
-        perror("sendto");
+	    incomingFrame = makeEthFrame(buffer);
+			if(hthasstrkey(hasht,incomingFrame->dstMAC)){
+      	if (-1 == sendto(out, buffer, rdct, 0,
+                            	(struct sockaddr*)&bcaddr,
+                            	sizeof(bcaddr))){
+        	perror("sendto");
+				}
       }
     }
     else if(FD_ISSET(in, &rdset) || FD_ISSET(out,&rdset)) {
@@ -311,20 +341,22 @@ void bridge(int tap, int in, int out, struct sockaddr_in bcaddr) {
 			if(FD_ISSET(in, &rdset)){
   			rdct = recvfrom(in, buffer, BUFSZ, 0, 
                    			(struct sockaddr*)&from, &flen);
-			}else{
+			}
+			else{
 	  		rdct = recvfrom(out, buffer, BUFSZ, 0,
 												(struct sockaddr*)&from, &flen);	
 			}
 			if(rdct < 0) {
   			perror("recvfrom");
   		}
+	    incomingFrame = makeEthFrame(buffer);
+			if(!hthasstrkey(hasht,incomingFrame->srcMAC))
+				htstrinsert(hasht,incomingFrame->srcMAC,&from);
 			else if(-1 == write(tap, buffer, rdct)) {
     		perror("write");
  		 	}
-			
-
     }
-    maxfd = mkfdset(&rdset, tap, in, out, 0);
+    maxfd = mkfdset(&rdset, tap, in, 0);
   }
 
 	htfree(hasht);
