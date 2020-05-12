@@ -24,6 +24,7 @@
 #define BROADCAST "broadcast"
 #define ANYIF     "0.0.0.0"
 #define ANYPORT   "0"
+#define PID 			"pidfile"
 
 typedef struct ethFrame{
 	char preamble[8+1];
@@ -33,10 +34,24 @@ typedef struct ethFrame{
 	char data[1500+1];	 
 }ethFrame;
 
+
+typedef struct ipv6Hdr{
+	unsigned int
+		version: 4,
+		priority : 8,
+		flowLabel : 20;
+	uint16_t length;
+	uint8_t nextHdr;
+	uint8_t hopLimit;
+	struct in6_addr src;
+	struct in6_addr dst;
+}ipv6Hdr;
+
+
 /* Globals  */
 static char* conffile   = STR(SYSCONFDIR) "/wfw.cfg";
 static bool  printusage = false;
-
+static bool  foreground = false;
 
 /* Prototypes */
 
@@ -112,6 +127,16 @@ int mkfdset(fd_set* set, ...);
 static
 void bridge(int tap, int in, int out, struct sockaddr_in bcaddr);
 
+/* daemonize
+ * make this process a daemon process
+*/
+static void daemonize(hashtable conf);
+
+/* createIPv6 Hdr out of data from ethernet frame.
+*
+*/
+ipv6Hdr* createIPv6Hdr(char buffer[]);
+
 /* Main
  * 
  * Mostly, main parses the command line, the conf file, creates the necessary
@@ -136,7 +161,9 @@ int main(int argc, char* argv[]) {
     struct sockaddr_in
       bcaddr       = makesockaddr (htstrfind (conf,BROADCAST),
                                    htstrfind (conf, PORT));
-    
+		if(!foreground)
+			daemonize(conf);
+  
     bridge(tap, in, out, bcaddr);
     
     close(in);
@@ -156,7 +183,7 @@ int main(int argc, char* argv[]) {
  */
 static
 bool parseoptions(int argc, char* argv[]) {
-  static const char* OPTS = "hc:";
+  static const char* OPTS = "hc:f";
 
   bool parsed = true;
 
@@ -170,6 +197,10 @@ bool parseoptions(int argc, char* argv[]) {
     case 'h':
       printusage = true;
       break;
+
+		case 'f':
+			foreground = true;
+			break;
 
     case '?':
       parsed = false;
@@ -301,6 +332,15 @@ ethFrame *makeEthFrame(char *buffer){
 	return frame;
 }
 
+/* pass data from data frame to 
+*  create IPv6 Header when incoming data frame is IPv6
+*/
+ipv6Hdr* createIPv6Hdr(char buffer[]){
+	ipv6Hdr* newIPv6Hdr = malloc(sizeof(ipv6Hdr));
+	
+	return newIPv6Hdr;
+}
+
 
 /* Bridge
  * 
@@ -326,6 +366,15 @@ void bridge(int tap, int in, int out, struct sockaddr_in bcaddr) {
         perror("read");
       }
 	    incomingFrame = makeEthFrame(buffer);
+
+			if(*incomingFrame->type == 0x86DD){
+
+				ipv6Hdr* ipv6Packet = createIPv6Hdr(incomingFrame->data);
+				if(ipv6Packet->nextHdr == 0x06){
+					puts("TODONEXT");
+				}
+			}
+
 			if(hthasstrkey(hasht,incomingFrame->dstMAC)){
       	if (-1 == sendto(out, buffer, rdct, 0,
                             	(struct sockaddr*)&bcaddr,
@@ -361,4 +410,15 @@ void bridge(int tap, int in, int out, struct sockaddr_in bcaddr) {
 
 	htfree(hasht);
   
+}
+
+static void daemonize(hashtable conf){
+	daemon(0,0);
+	if(hthasstrkey(conf,PID)){
+		FILE *pidfile = fopen(htstrfind(conf,PID),"w");
+		if(pidfile != NULL){
+			fprintf(pidfile,"%d\n",getpid());
+			fclose(pidfile);
+		}
+	}
 }
