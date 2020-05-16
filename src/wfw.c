@@ -42,10 +42,40 @@ typedef struct ipv6Hdr{
 	uint16_t length;
 	uint8_t nextHdr;
 	uint8_t hopLimit;
-	struct in6_addr src;
-	struct in6_addr dst;
+	unsigned char src[16];
+	unsigned char dst[16];
+	uint8_t headers[];
 }ipv6Hdr_t;
 
+typedef struct tcpsegment{
+	uint16_t srcPort;
+	uint16_t dstPort;
+	uint32_t seqNum;
+	uint32_t ackNum;
+	unsigned int 
+		hdrsz : 4,
+		resev : 3,
+		NS		: 1,
+		CWR		: 1,
+		ECE		: 1,
+		URG		: 1,
+		ACK		: 1,
+		PSH		: 1,
+		RST		: 1,
+		SYN		: 1,
+		FIN		: 1;
+	uint16_t window;
+	uint16_t checksum;
+	uint16_t urgent;
+	uint32_t options[];
+
+}tcpsegment;
+
+typedef struct cookie{
+	void* localPort;
+	void* remotePort;
+	void* remoteAddr;	
+}cookie;
 
 /* Globals  */
 static char* conffile   = STR(SYSCONFDIR) "/wfw.cfg";
@@ -127,7 +157,7 @@ static
 void bridge(int tap, int in, int out, struct sockaddr_in bcaddr);
 
 //duplicate input
-void* memdup(void* p, size_t s);
+static void* memdup(void* p, size_t s);
 //check incoming mac if is special mac
 static bool isspecialmac(unsigned char* mac);
 
@@ -321,8 +351,10 @@ void bridge(int tap, int in, int out, struct sockaddr_in bcaddr) {
   
   int maxfd = mkfdset(&rdset, tap, in, out, 0);
 	
-	hashtable hasht = htnew(1526,(keycomp)memcmp,NULL);
+	hashtable hasht = htnew(100,(keycomp)memcmp,NULL);
 	int sock;
+	
+	hashtable tcphash = htnew(100,(keycomp)memcmp,NULL);
 
   while(0 <= select(1+maxfd, &rdset, NULL, NULL, NULL)) {
     if(FD_ISSET(tap, &rdset)) {
@@ -332,16 +364,26 @@ void bridge(int tap, int in, int out, struct sockaddr_in bcaddr) {
         perror("read");
       }
 			else{
-				struct sockaddr* addr = htfind(hasht, frame.dst, 6);
-				if(addr != NULL){
-					addr = &bcaddr;
-
-					if(frame.type == htons(0x86DD)){
-						ipv6Hdr_t ipv6Packet;
-						if(ipv6Packet.nextHdr == htons(0x06)){
-							puts("TODONEXT");
+				if(frame.type == htons(0x86DD)){
+					ipv6Hdr_t *packet = (ipv6Hdr_t*)(&frame)->data;
+					if(packet->nextHdr == htons(0x06)){
+						tcpsegment* cursegment = (tcpsegment*)(packet)->headers;
+						if(cursegment->SYN == 1){
+							//TODO: add key to hash table with local port number,
+							//			the remote IP address, the remote port.	
+							void *key = memdup(&cursegment->srcPort,16);
+							cookie *insert = malloc(sizeof(cookie));
+							insert->localPort = memdup(&cursegment->srcPort,16);
+							insert->remotePort = memdup(&cursegment->dstPort,16);
+							insert->remoteAddr = memdup(&packet->dst,16);
+							htinsert(tcphash,key,16,insert);
 						}
 					}
+				}			
+				struct sockaddr* addr = htfind(hasht, frame.dst, 6);
+				if(addr != NULL){
+					//addr = &bcaddr;
+
         	if(-1 == sendto(sock, &frame, rdct, 0,
                             	addr, sizeof(addr))){
         		perror("sendto");
@@ -369,7 +411,8 @@ void bridge(int tap, int in, int out, struct sockaddr_in bcaddr) {
 					}
 					else{
 						void* key = memdup(frame.src, 6);
-						void* val = memdup(&from, sizeof(struct sockaddr_in));
+						void* val = memdup(&from, 
+																	sizeof(struct sockaddr_in));
 						htinsert(hasht, key, 6, val);
 					}
 				}
@@ -384,7 +427,7 @@ void bridge(int tap, int in, int out, struct sockaddr_in bcaddr) {
 	htfree(hasht);
 }
 
-void* memdup(void* p, size_t s){
+static void* memdup(void* p, size_t s){
 	void *n = malloc(s);
 	if(n != NULL)
 		memcpy(n, p, s);
