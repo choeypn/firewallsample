@@ -369,8 +369,6 @@ void bridge(int tap, int in, int out, struct sockaddr_in bcaddr) {
 					if(packet->nextHdr == htons(0x06)){
 						tcpsegment* cursegment = (tcpsegment*)(packet)->headers;
 						if(cursegment->SYN == 1){
-							//TODO: add key to hash table with local port number,
-							//			the remote IP address, the remote port.	
 							void *key = memdup(&cursegment->srcPort,16);
 							cookie *insert = malloc(sizeof(cookie));
 							insert->localPort = memdup(&cursegment->srcPort,16);
@@ -417,9 +415,21 @@ void bridge(int tap, int in, int out, struct sockaddr_in bcaddr) {
 					}
 				}
 
-			  if(-1 == write(tap, &frame, rdct)) {
-    			perror("write");
- 		 		}
+				if(frame.type == htons(0x86DD)){
+					ipv6Hdr_t *packet = (ipv6Hdr_t*)(&frame)->data;
+					if(packet->nextHdr == htons(0x06)){
+						tcpsegment* cursegment = (tcpsegment*)(packet)->headers;
+						if(hthaskey(tcphash,&cursegment->dstPort,16)){
+					  	if(-1 == write(tap, &frame, rdct))
+    						perror("write");
+						}
+					}
+				}
+				else{	
+			  	if(-1 == write(tap, &frame, rdct)) {
+    					perror("write");
+ 		 			}
+				}
       }
     maxfd = mkfdset(&rdset, tap, in, out, 0);
     }
