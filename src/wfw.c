@@ -26,13 +26,12 @@
 #define ANYPORT   "0"
 #define PID 			"pidfile"
 
-typedef struct ethFrame{
-	char preamble[8+1];
-	char dstMAC[6+1];
-	char srcMAC[6+1];
-	char type[2+1];
-	char data[1500+1];	 
-}ethFrame;
+typedef struct frame{
+	uint8_t  dst[6];
+	uint8_t  src[6];
+	uint16_t type;
+	uint8_t  data[1500];	 
+}frame_t;
 
 
 typedef struct ipv6Hdr{
@@ -45,7 +44,7 @@ typedef struct ipv6Hdr{
 	uint8_t hopLimit;
 	struct in6_addr src;
 	struct in6_addr dst;
-}ipv6Hdr;
+}ipv6Hdr_t;
 
 
 /* Globals  */
@@ -127,15 +126,15 @@ int mkfdset(fd_set* set, ...);
 static
 void bridge(int tap, int in, int out, struct sockaddr_in bcaddr);
 
+//duplicate input
+void* memdup(void* p, size_t s);
+//check incoming mac if is special mac
+static bool isspecialmac(unsigned char* mac);
+
 /* daemonize
  * make this process a daemon process
 */
 static void daemonize(hashtable conf);
-
-/* createIPv6 Hdr out of data from ethernet frame.
-*
-*/
-ipv6Hdr* createIPv6Hdr(char buffer[]);
 
 /* Main
  * 
@@ -312,104 +311,91 @@ int mkfdset(fd_set* set, ...) {
   return max;
 }
 
-/* makeEthFrame
- * create an ethernet frame structure
- * copy each specific data from buffer to ethFrame
- * return ethFrame
- */
-ethFrame *makeEthFrame(char *buffer){
-	struct ethFrame *frame = malloc(sizeof(struct ethFrame));
-	memcpy(frame->preamble,&buffer[0],9);
-	memcpy(frame->dstMAC,&buffer[8],7);
-	memcpy(frame->srcMAC,&buffer[14],7);
-	memcpy(frame->type,&buffer[22],3);
-	memcpy(frame->data,&buffer[24],1500);
-	frame->preamble[8] = '\0';
-	frame->dstMAC[6] = '\0';
-	frame->srcMAC[6] = '\0';
-	frame->type[2] = '\0';
-	frame->data[1500] = '\0';
-	return frame;
-}
-
-/* pass data from data frame to 
-*  create IPv6 Header when incoming data frame is IPv6
-*/
-ipv6Hdr* createIPv6Hdr(char buffer[]){
-	ipv6Hdr* newIPv6Hdr = malloc(sizeof(ipv6Hdr));
-	
-	return newIPv6Hdr;
-}
-
-
 /* Bridge
  * 
  * Note the use of select, sendto, and recvfrom.  
  */
 static
 void bridge(int tap, int in, int out, struct sockaddr_in bcaddr) {
-#define BUFSZ 1526
-
   fd_set rdset;
   
-  int maxfd = mkfdset(&rdset, tap, in, 0);
-  
-  char buffer[BUFSZ];
-  ethFrame *incomingFrame;
-
-	hashtable hasht = htnew(BUFSZ,(keycomp) memcmp,NULL);
+  int maxfd = mkfdset(&rdset, tap, in, out, 0);
+	
+	hashtable hasht = htnew(1526,(keycomp)memcmp,NULL);
+	int sock;
 
   while(0 <= select(1+maxfd, &rdset, NULL, NULL, NULL)) {
     if(FD_ISSET(tap, &rdset)) {
-      ssize_t rdct = read(tap, buffer, BUFSZ);
+			frame_t frame;
+      ssize_t rdct = read(tap, &frame, sizeof(frame_t));
       if(rdct < 0) {
         perror("read");
       }
-	    incomingFrame = makeEthFrame(buffer);
+			else{
+				struct sockaddr* addr = htfind(hasht, frame.dst, 6);
+				if(addr != NULL){
+					addr = &bcaddr;
 
-			if(*incomingFrame->type == 0x86DD){
-
-				ipv6Hdr* ipv6Packet = createIPv6Hdr(incomingFrame->data);
-				if(ipv6Packet->nextHdr == 0x06){
-					puts("TODONEXT");
+					if(frame.type == htons(0x86DD)){
+						ipv6Hdr_t ipv6Packet;
+						if(ipv6Packet.nextHdr == htons(0x06)){
+							puts("TODONEXT");
+						}
+					}
+        	if(-1 == sendto(sock, &frame, rdct, 0,
+                            	addr, sizeof(addr))){
+        		perror("sendto");
+					}
 				}
 			}
-
-			if(hthasstrkey(hasht,incomingFrame->dstMAC)){
-      	if (-1 == sendto(out, buffer, rdct, 0,
-                            	(struct sockaddr*)&bcaddr,
-                            	sizeof(bcaddr))){
-        	perror("sendto");
-				}
-      }
     }
     else if(FD_ISSET(in, &rdset) || FD_ISSET(out,&rdset)) {
-			ssize_t rdct;
+			sock = FD_ISSET(in, &rdset) ? in : out;
+			
+			frame_t frame;
 			struct sockaddr_in from;
 			socklen_t flen = sizeof(from);
-			if(FD_ISSET(in, &rdset)){
-  			rdct = recvfrom(in, buffer, BUFSZ, 0, 
-                   			(struct sockaddr*)&from, &flen);
-			}
-			else{
-	  		rdct = recvfrom(out, buffer, BUFSZ, 0,
-												(struct sockaddr*)&from, &flen);	
-			}
-			if(rdct < 0) {
+
+			ssize_t rdct = recvfrom(in, &frame,sizeof(frame_t), 0,
+															(struct sockaddr*)&from,&flen);
+		  if(rdct < 0) {
   			perror("recvfrom");
   		}
-	    incomingFrame = makeEthFrame(buffer);
-			if(!hthasstrkey(hasht,incomingFrame->srcMAC))
-				htstrinsert(hasht,incomingFrame->srcMAC,&from);
-			else if(-1 == write(tap, buffer, rdct)) {
-    		perror("write");
- 		 	}
-    }
-    maxfd = mkfdset(&rdset, tap, in, 0);
-  }
+			else{
+				if(!isspecialmac(frame.src)){
+					if(hthaskey(hasht, frame.src, 6)){
+						memcpy(htfind(hasht, frame.src, 6),
+									&from, sizeof(struct sockaddr_in));
+					}
+					else{
+						void* key = memdup(frame.src, 6);
+						void* val = memdup(&from, sizeof(struct sockaddr_in));
+						htinsert(hasht, key, 6, val);
+					}
+				}
 
+			  if(-1 == write(tap, &frame, rdct)) {
+    			perror("write");
+ 		 		}
+      }
+    maxfd = mkfdset(&rdset, tap, in, out, 0);
+    }
+	}
 	htfree(hasht);
-  
+}
+
+void* memdup(void* p, size_t s){
+	void *n = malloc(s);
+	if(n != NULL)
+		memcpy(n, p, s);
+	return n;
+}
+
+static bool isspecialmac(unsigned char* mac){
+	static const char mcast [] = {0x33, 0x33};
+	static const char bcast [] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+
+	return (memcmp(mac, mcast, 2) == 0 || memcmp(mac, bcast, 6) == 0);
 }
 
 static void daemonize(hashtable conf){
