@@ -214,6 +214,7 @@ void bridge(int tap, int in, int out, struct sockaddr_in bcaddr) {
   int maxfd = mkfdset(&rdset, tap, in, out, 0);
 	hashtable hasht = htnew(100,(keycomp)memcmp,NULL);
 	hashtable tcphash = htnew(100,(keycomp)memcmp,NULL);
+	hashtable blacklist = htnew(100,(keycomp)memcmp,NULL);
 
   while(0 <= select(1+maxfd, &rdset, NULL, NULL, NULL)) {
     if(FD_ISSET(tap, &rdset)) {
