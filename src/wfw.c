@@ -237,7 +237,7 @@ void handletap(int tap,int socket, hashtable hasht,hashtable tcphash){
   	perror("read");
   }
 	else{
-		if(frame.type == htons(0x86DD)){
+		if(frame.type == 0x86DD){
 			verifytapIPv6(frame,tcphash);
 		}			
 		struct sockaddr* addr = htfind(hasht, frame.dst, 6);
@@ -266,7 +266,7 @@ void handlewrite(int tap, int sock, hashtable hasht, hashtable tcphash){
 		if(!isspecialmac(frame.src)){
 			addMACtohash(frame,from,hasht);
 		}
-		if(frame.type == htons(0x86DD)){
+		if(frame.type == 0x86DD){
 			handleincomingIPv6(tap, rdct, frame, tcphash);
 		}
 		else{	
@@ -295,7 +295,7 @@ void addMACtohash(frame_t frame, struct sockaddr_in from, hashtable hasht){
 static 
 void verifytapIPv6(frame_t frame, hashtable tcphash){
 	ipv6Hdr_t *packet = (ipv6Hdr_t*)(&frame)->data;
-	if(packet->nextHdr == htons(0x06)){
+	if(packet->nextHdr == 0x06){
 		tcpsegment* cursegment = (tcpsegment*)(packet)->headers;
 		if(cursegment->SYN == 1){
 			void *key = memdup(&cursegment->srcPort,16);
@@ -312,7 +312,7 @@ void verifytapIPv6(frame_t frame, hashtable tcphash){
 static
 void handleincomingIPv6(int tap, ssize_t rdct, frame_t frame, hashtable tcphash){
 	ipv6Hdr_t *packet = (ipv6Hdr_t*)(&frame)->data;
-	if(packet->nextHdr == htons(0x06)){
+	if(packet->nextHdr == 0x06){
 		tcpsegment* cursegment = (tcpsegment*)(packet)->headers;
 		if(hthaskey(tcphash,&cursegment->dstPort,16)){
 			if(-1 == write(tap, &frame, rdct)){
