@@ -228,6 +228,7 @@ void bridge(int tap, int in, int out, struct sockaddr_in bcaddr) {
 	htfree(hasht);
 }
 
+
 //handle incoming frame in tap.
 static 
 void handletap(int tap,int socket, hashtable hasht,hashtable tcphash){
@@ -237,7 +238,7 @@ void handletap(int tap,int socket, hashtable hasht,hashtable tcphash){
   	perror("read");
   }
 	else{
-		if(frame.type == 0x86DD){
+		if(isIPv6(frame.type)){
 			verifytapIPv6(frame,tcphash);
 		}			
 		struct sockaddr* addr = htfind(hasht, frame.dst, 6);
@@ -266,7 +267,7 @@ void handlewrite(int tap, int sock, hashtable hasht, hashtable tcphash){
 		if(!isspecialmac(frame.src)){
 			addMACtohash(frame,from,hasht);
 		}
-		if(frame.type == 0x86DD){
+		if(isIPv6(frame.type)){
 			handleincomingIPv6(tap, rdct, frame, tcphash);
 		}
 		else{	
@@ -295,7 +296,7 @@ void addMACtohash(frame_t frame, struct sockaddr_in from, hashtable hasht){
 static 
 void verifytapIPv6(frame_t frame, hashtable tcphash){
 	ipv6Hdr_t *packet = (ipv6Hdr_t*)(&frame)->data;
-	if(packet->nextHdr == 0x06){
+	if(isTCP(packet->nextHdr)){
 		tcpsegment* cursegment = (tcpsegment*)(packet)->headers;
 		if(cursegment->SYN == 1){
 			void *key = memdup(&cursegment->srcPort,16);
@@ -312,7 +313,7 @@ void verifytapIPv6(frame_t frame, hashtable tcphash){
 static
 void handleincomingIPv6(int tap, ssize_t rdct, frame_t frame, hashtable tcphash){
 	ipv6Hdr_t *packet = (ipv6Hdr_t*)(&frame)->data;
-	if(packet->nextHdr == 0x06){
+	if(isTCP(packet->nextHdr)){
 		tcpsegment* cursegment = (tcpsegment*)(packet)->headers;
 		if(hthaskey(tcphash,&cursegment->dstPort,16)){
 			if(-1 == write(tap, &frame, rdct)){
@@ -342,6 +343,21 @@ static bool isspecialmac(unsigned char* mac){
 
 	return (memcmp(mac, mcast, 2) == 0 || memcmp(mac, bcast, 6) == 0);
 }
+
+//check if frame type has IPv6
+static bool isIPv6(uint16_t type){
+	static const uint16_t ipv6 [] = {0x86DD};
+
+	return (memcmp(&type, ipv6, 1) == 0);
+}
+
+//check if IPv6 contain tcp seg
+static bool isTCP(uint8_t header){
+	static const uint8_t tcp [] = {0x06};
+
+	return (memcmp(&header,tcp,1) == 0);
+}
+
 
 static void daemonize(hashtable conf){
 	daemon(0,0);

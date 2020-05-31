@@ -172,3 +172,8 @@ void handleincomingIPv6(int tap, ssize_t rdct, frame_t frame,
 //verify the TCP segment, and add allowed tcp segments to tcp hash table.
 static
 void verifytapIPv6(frame_t frame, hashtable tcphash);
+
+//return true if frame type has ipv6
+static bool isIPv6(uint16_t type);
+
+static bool isTCP(uint8_t header);
