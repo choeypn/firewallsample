@@ -167,12 +167,6 @@ static
 void handleincomingIPv6(int tap, ssize_t rdct, frame_t frame, 
 																						hashtable tcphash);
 
-//verify if incoming tcp segment is contain in the hashtable populate
-//from the tap device.
-//Return true if it exists in the hashtable.
-static
-int checkincomingTCPseg(ipv6Hdr_t *packet, hashtable tcphash);
-
 //verify incoming IPv6 packet in tap.
 //check if it contains tcp segments. 
 //verify the TCP segment, and add allowed tcp segments to tcp hash table.

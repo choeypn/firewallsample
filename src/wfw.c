@@ -210,12 +210,9 @@ int mkfdset(fd_set* set, ...) {
 static
 void bridge(int tap, int in, int out, struct sockaddr_in bcaddr) {
   fd_set rdset;
-  
+  int sock; 
   int maxfd = mkfdset(&rdset, tap, in, out, 0);
-	
 	hashtable hasht = htnew(100,(keycomp)memcmp,NULL);
-	int sock;
-	
 	hashtable tcphash = htnew(100,(keycomp)memcmp,NULL);
 
   while(0 <= select(1+maxfd, &rdset, NULL, NULL, NULL)) {
@@ -316,8 +313,9 @@ static
 void handleincomingIPv6(int tap, ssize_t rdct, frame_t frame, hashtable tcphash){
 	ipv6Hdr_t *packet = (ipv6Hdr_t*)(&frame)->data;
 	if(packet->nextHdr == htons(0x06)){
-		if(checkincomingTCPseg(packet,tcphash)){
-			if(-1 == write(tap, &frame, rdct)) {
+		tcpsegment* cursegment = (tcpsegment*)(packet)->headers;
+		if(hthaskey(tcphash,&cursegment->dstPort,16)){
+			if(-1 == write(tap, &frame, rdct)){
     		perror("write");
  		 	}
 		}
@@ -327,16 +325,6 @@ void handleincomingIPv6(int tap, ssize_t rdct, frame_t frame, hashtable tcphash)
     	perror("write");
  		}
 	}
-}
-
-//check if TCP segment is exists in tcphash
-static
-int checkincomingTCPseg(ipv6Hdr_t *packet,hashtable tcphash){
-	int state = 0;
-	tcpsegment* cursegment = (tcpsegment*)(packet)->headers;
-	if(hthaskey(tcphash,&cursegment->dstPort,16))
-		state = 1;
-	return state;
 }
 
 //duplicata a value with its own memory
