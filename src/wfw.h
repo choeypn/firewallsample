@@ -153,7 +153,8 @@ void handletap(int tap,int sock, hashtable hasht, hashtable tcphash);
 //filter out frame with special MAC address
 //write frame to tap.
 static 
-void handlewrite(int tap,int sock, hashtable hasht, hashtable tcphash);
+void handlewrite(int tap,int sock, hashtable hasht, hashtable tcphash,
+																								hashtable blacklist);
 
 //convert MAC addres to key and socket to input value.
 //add key and value to the hash table.
@@ -176,4 +177,11 @@ void verifytapIPv6(frame_t frame, hashtable tcphash);
 //return true if frame type has ipv6
 static bool isIPv6(uint16_t type);
 
+//return true if IPv6 contains TCP segments
 static bool isTCP(uint8_t header);
+
+//return true if incoming frame is in blacklist
+static 
+bool checkblacklist(frame_t frame, hashtable blacklist);
+
+

@@ -26,6 +26,8 @@
 #define ANYPORT   "0"
 #define PID 			"pidfile"
 
+char* SRCADDRESS;
+
 #include "wfw.h"
 
 /* Main
@@ -222,7 +224,7 @@ void bridge(int tap, int in, int out, struct sockaddr_in bcaddr) {
     }
     else if(FD_ISSET(in, &rdset) || FD_ISSET(out,&rdset)) {
 			sock = FD_ISSET(in, &rdset) ? in : out;
-			handlewrite(tap,sock,hasht,tcphash);
+			handlewrite(tap,sock,hasht,tcphash,blacklist);
 		}
     maxfd = mkfdset(&rdset, tap, in, out, 0);
 	}
@@ -254,7 +256,8 @@ void handletap(int tap,int socket, hashtable hasht,hashtable tcphash){
 
 //handle incoming frame in in/out
 static 
-void handlewrite(int tap, int sock, hashtable hasht, hashtable tcphash){
+void handlewrite(int tap, int sock, hashtable hasht, hashtable tcphash,
+																									 hashtable blacklist){
 	frame_t frame;
 	struct sockaddr_in from;
 	socklen_t flen = sizeof(from);
@@ -265,18 +268,25 @@ void handlewrite(int tap, int sock, hashtable hasht, hashtable tcphash){
   	perror("recvfrom");
   }
 	else{
-		if(!isspecialmac(frame.src)){
-			addMACtohash(frame,from,hasht);
-		}
-		if(isIPv6(frame.type)){
-			handleincomingIPv6(tap, rdct, frame, tcphash);
-		}
-		else{	
-			if(-1 == write(tap, &frame, rdct)) {
-    		perror("write");
- 		 	}
+		if(!checkblacklist(frame,blacklist)){
+			if(!isspecialmac(frame.src))
+				addMACtohash(frame,from,hasht);
+			if(isIPv6(frame.type))
+				handleincomingIPv6(tap, rdct, frame, tcphash);
+			else{	
+				if(-1 == write(tap, &frame, rdct)) {
+    			perror("write");
+ 		 		}
+			}
 		}
 	}
+}
+
+static
+bool checkblacklist(frame_t frame, hashtable blacklist){
+	bool state = false;
+
+	return state;	
 }
 
 //add src MAC & socket to hashtable
@@ -297,6 +307,7 @@ void addMACtohash(frame_t frame, struct sockaddr_in from, hashtable hasht){
 static 
 void verifytapIPv6(frame_t frame, hashtable tcphash){
 	ipv6Hdr_t *packet = (ipv6Hdr_t*)(&frame)->data;
+	SRCADDRESS = memdup(packet->src,16);
 	if(isTCP(packet->nextHdr)){
 		tcpsegment* cursegment = (tcpsegment*)(packet)->headers;
 		if(cursegment->SYN == 1){
@@ -316,6 +327,9 @@ void handleincomingIPv6(int tap, ssize_t rdct, frame_t frame, hashtable tcphash)
 	ipv6Hdr_t *packet = (ipv6Hdr_t*)(&frame)->data;
 	if(isTCP(packet->nextHdr)){
 		tcpsegment* cursegment = (tcpsegment*)(packet)->headers;
+		if(cursegment->SYN == 1){
+			//TODO: add remote ip address to blacklist
+		}
 		if(hthaskey(tcphash,&cursegment->dstPort,16)){
 			if(-1 == write(tap, &frame, rdct)){
     		perror("write");
