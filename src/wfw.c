@@ -220,85 +220,126 @@ void bridge(int tap, int in, int out, struct sockaddr_in bcaddr) {
 
   while(0 <= select(1+maxfd, &rdset, NULL, NULL, NULL)) {
     if(FD_ISSET(tap, &rdset)) {
-			frame_t frame;
-      ssize_t rdct = read(tap, &frame, sizeof(frame_t));
-      if(rdct < 0) {
-        perror("read");
-      }
-			else{
-				if(frame.type == htons(0x86DD)){
-					ipv6Hdr_t *packet = (ipv6Hdr_t*)(&frame)->data;
-					if(packet->nextHdr == htons(0x06)){
-						tcpsegment* cursegment = (tcpsegment*)(packet)->headers;
-						if(cursegment->SYN == 1){
-							void *key = memdup(&cursegment->srcPort,16);
-							cookie *insert = malloc(sizeof(cookie));
-							insert->localPort = memdup(&cursegment->srcPort,16);
-							insert->remotePort = memdup(&cursegment->dstPort,16);
-							insert->remoteAddr = memdup(&packet->dst,16);
-							htinsert(tcphash,key,16,insert);
-						}
-					}
-				}			
-				struct sockaddr* addr = htfind(hasht, frame.dst, 6);
-				if(addr != NULL){
-					//addr = &bcaddr;
-
-        	if(-1 == sendto(sock, &frame, rdct, 0,
-                            	addr, sizeof(addr))){
-        		perror("sendto");
-					}
-				}
-			}
+			handletap(tap,sock,hasht,tcphash);
     }
     else if(FD_ISSET(in, &rdset) || FD_ISSET(out,&rdset)) {
 			sock = FD_ISSET(in, &rdset) ? in : out;
-			
-			frame_t frame;
-			struct sockaddr_in from;
-			socklen_t flen = sizeof(from);
-
-			ssize_t rdct = recvfrom(in, &frame,sizeof(frame_t), 0,
-															(struct sockaddr*)&from,&flen);
-		  if(rdct < 0) {
-  			perror("recvfrom");
-  		}
-			else{
-				if(!isspecialmac(frame.src)){
-					if(hthaskey(hasht, frame.src, 6)){
-						memcpy(htfind(hasht, frame.src, 6),
-									&from, sizeof(struct sockaddr_in));
-					}
-					else{
-						void* key = memdup(frame.src, 6);
-						void* val = memdup(&from, 
-																	sizeof(struct sockaddr_in));
-						htinsert(hasht, key, 6, val);
-					}
-				}
-
-				if(frame.type == htons(0x86DD)){
-					ipv6Hdr_t *packet = (ipv6Hdr_t*)(&frame)->data;
-					if(packet->nextHdr == htons(0x06)){
-						tcpsegment* cursegment = (tcpsegment*)(packet)->headers;
-						if(hthaskey(tcphash,&cursegment->dstPort,16)){
-					  	if(-1 == write(tap, &frame, rdct))
-    						perror("write");
-						}
-					}
-				}
-				else{	
-			  	if(-1 == write(tap, &frame, rdct)) {
-    					perror("write");
- 		 			}
-				}
-      }
+			handlewrite(tap,sock,hasht,tcphash);
+		}
     maxfd = mkfdset(&rdset, tap, in, out, 0);
-    }
 	}
 	htfree(hasht);
 }
 
+//handle incoming frame in tap.
+static 
+void handletap(int tap,int socket, hashtable hasht,hashtable tcphash){
+	frame_t frame;
+  ssize_t rdct = read(tap, &frame, sizeof(frame_t));
+  if(rdct < 0) {
+  	perror("read");
+  }
+	else{
+		if(frame.type == htons(0x86DD)){
+			verifytapIPv6(frame,tcphash);
+		}			
+		struct sockaddr* addr = htfind(hasht, frame.dst, 6);
+		if(addr != NULL){
+      if(-1 == sendto(socket, &frame, rdct, 0,
+                            	addr, sizeof(addr))){
+        perror("sendto");
+			}
+		}
+	}  
+}
+
+//handle incoming frame in in/out
+static 
+void handlewrite(int tap, int sock, hashtable hasht, hashtable tcphash){
+	frame_t frame;
+	struct sockaddr_in from;
+	socklen_t flen = sizeof(from);
+
+	ssize_t rdct = recvfrom(sock, &frame,sizeof(frame_t), 0,
+														(struct sockaddr*)&from,&flen);
+	if(rdct < 0) {
+  	perror("recvfrom");
+  }
+	else{
+		if(!isspecialmac(frame.src)){
+			addMACtohash(frame,from,hasht);
+		}
+		if(frame.type == htons(0x86DD)){
+			handleincomingIPv6(tap, rdct, frame, tcphash);
+		}
+		else{	
+			if(-1 == write(tap, &frame, rdct)) {
+    		perror("write");
+ 		 	}
+		}
+	}
+}
+
+//add src MAC & socket to hashtable
+static
+void addMACtohash(frame_t frame, struct sockaddr_in from, hashtable hasht){
+	if(hthaskey(hasht, frame.src, 6)){
+		memcpy(htfind(hasht, frame.src, 6),
+											&from, sizeof(struct sockaddr_in));
+	}
+	else{
+		void* key = memdup(frame.src, 6);
+		void* val = memdup(&from, sizeof(struct sockaddr_in));
+		htinsert(hasht, key, 6, val);
+	}
+}
+
+//verify IPv6 packet in tab
+static 
+void verifytapIPv6(frame_t frame, hashtable tcphash){
+	ipv6Hdr_t *packet = (ipv6Hdr_t*)(&frame)->data;
+	if(packet->nextHdr == htons(0x06)){
+		tcpsegment* cursegment = (tcpsegment*)(packet)->headers;
+		if(cursegment->SYN == 1){
+			void *key = memdup(&cursegment->srcPort,16);
+			cookie *insert = malloc(sizeof(cookie));
+			insert->localPort = memdup(&cursegment->srcPort,16);
+			insert->remotePort = memdup(&cursegment->dstPort,16);
+			insert->remoteAddr = memdup(&packet->dst,16);
+			htinsert(tcphash,key,16,insert);
+		}
+	}
+}
+
+//handle imcoming IPv6 packet in in/out
+static
+void handleincomingIPv6(int tap, ssize_t rdct, frame_t frame, hashtable tcphash){
+	ipv6Hdr_t *packet = (ipv6Hdr_t*)(&frame)->data;
+	if(packet->nextHdr == htons(0x06)){
+		if(checkincomingTCPseg(packet,tcphash)){
+			if(-1 == write(tap, &frame, rdct)) {
+    		perror("write");
+ 		 	}
+		}
+	}
+	else{
+		if(-1 == write(tap, &frame, rdct)) {
+    	perror("write");
+ 		}
+	}
+}
+
+//check if TCP segment is exists in tcphash
+static
+int checkincomingTCPseg(ipv6Hdr_t *packet,hashtable tcphash){
+	int state = 0;
+	tcpsegment* cursegment = (tcpsegment*)(packet)->headers;
+	if(hthaskey(tcphash,&cursegment->dstPort,16))
+		state = 1;
+	return state;
+}
+
+//duplicata a value with its own memory
 static void* memdup(void* p, size_t s){
 	void *n = malloc(s);
 	if(n != NULL)
@@ -306,6 +347,7 @@ static void* memdup(void* p, size_t s){
 	return n;
 }
 
+//check if given MAC is special (broadcast & multicast)
 static bool isspecialmac(unsigned char* mac){
 	static const char mcast [] = {0x33, 0x33};
 	static const char bcast [] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};

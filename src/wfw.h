@@ -142,4 +142,39 @@ static bool isspecialmac(unsigned char* mac);
 */
 static void daemonize(hashtable conf);
 
+//handle tap
+//read incoming frame to tap, verify if incoming frame has IPv6 packet.
+//check if destination is in the hash table, 
+//then forward incoming frame to destination address.
+static 
+void handletap(int tap,int sock, hashtable hasht, hashtable tcphash);
 
+//get incoming frame from in/out.
+//filter out frame with special MAC address
+//write frame to tap.
+static 
+void handlewrite(int tap,int sock, hashtable hasht, hashtable tcphash);
+
+//convert MAC addres to key and socket to input value.
+//add key and value to the hash table.
+static 
+void addMACtohash(frame_t frame, struct sockaddr_in from, hashtable hasht);
+
+
+//when IPv6 packet is detected, verify if it contains tcp segment.
+//write to tap if tcp seg is verified, or IPv6 does not contain tcp.
+static
+void handleincomingIPv6(int tap, ssize_t rdct, frame_t frame, 
+																						hashtable tcphash);
+
+//verify if incoming tcp segment is contain in the hashtable populate
+//from the tap device.
+//Return true if it exists in the hashtable.
+static
+int checkincomingTCPseg(ipv6Hdr_t *packet, hashtable tcphash);
+
+//verify incoming IPv6 packet in tap.
+//check if it contains tcp segments. 
+//verify the TCP segment, and add allowed tcp segments to tcp hash table.
+static
+void verifytapIPv6(frame_t frame, hashtable tcphash);
