@@ -209,6 +209,8 @@ int mkfdset(fd_set* set, ...) {
  * 
  * Note the use of select, sendto, and recvfrom.  
  */
+//NOTE: 0x0A03446E = 10.3.68.110, my own addr, inv 0x6E44030A
+//			0x22B			 = 555, port
 static
 void bridge(int tap, int in, int out, struct sockaddr_in bcaddr) {
   fd_set rdset;
@@ -217,6 +219,21 @@ void bridge(int tap, int in, int out, struct sockaddr_in bcaddr) {
 	hashtable hasht = htnew(100,(keycomp)memcmp,NULL);
 	hashtable tcphash = htnew(100,(keycomp)memcmp,NULL);
 	hashtable blacklist = htnew(100,(keycomp)memcmp,NULL);
+
+	int server = socket(PF_INET6, SOCK_STREAM, 0);
+	struct sockaddr_in server_addr = makeIPv6sockaddr("0","0x22B");
+	socklen_t len = sizeof(server_addr);
+	int client = accept(server, (struct sockaddr*)&server_addr,&len);
+
+	if(-1 == bind(server, (struct sockaddr*)&server_addr, sizeof(server_addr))){
+		perror("bind");
+		close(server);
+	}
+
+	if(-1 == listen(server,1)){
+		perror("listen");
+		close(server);
+	}
 
   while(0 <= select(1+maxfd, &rdset, NULL, NULL, NULL)) {
     if(FD_ISSET(tap, &rdset)) {
@@ -230,6 +247,19 @@ void bridge(int tap, int in, int out, struct sockaddr_in bcaddr) {
 	}
 	htfree(hasht);
 }
+
+// Make Sock Addr for IPv6
+static
+struct sockaddr_in makeIPv6sockaddr(char* address, char* port) {
+  struct sockaddr_in addr;
+  bzero(&addr, sizeof(addr));
+  addr.sin_len    = sizeof(addr);
+  addr.sin_family = AF_INET6;
+  addr.sin_port   = htons(atoi(port));
+  inet_pton(AF_INET6, address, &(addr.sin_addr));
+  return addr;
+}
+
 
 
 //handle incoming frame in tap.
@@ -325,6 +355,7 @@ void verifytapIPv6(frame_t frame, hashtable tcphash){
 
 //handle imcoming IPv6 packet in in/out
 //if the tcp contain a syn flag, add the IP to blacklist and exit.
+//create a tcp socket to send the blacklist to other people
 static
 void handleincomingIPv6(int tap, ssize_t rdct, frame_t frame, hashtable tcphash, 
 																															hashtable blacklist){
@@ -352,6 +383,14 @@ void handleincomingIPv6(int tap, ssize_t rdct, frame_t frame, hashtable tcphash,
     	perror("write");
  		}
 	}
+
+	if(mustblacklist)
+		notifyOther();
+}
+
+static 
+void notifyOther(){
+
 }
 
 //duplicata a value with its own memory
