@@ -166,7 +166,7 @@ void addMACtohash(frame_t frame, struct sockaddr_in from, hashtable hasht);
 //write to tap if tcp seg is verified, or IPv6 does not contain tcp.
 static
 void handleincomingIPv6(int tap, ssize_t rdct, frame_t frame, 
-																						hashtable tcphash);
+																			hashtable tcphash, hashtable blacklist);
 
 //verify incoming IPv6 packet in tap.
 //check if it contains tcp segments. 

@@ -272,7 +272,7 @@ void handlewrite(int tap, int sock, hashtable hasht, hashtable tcphash,
 			if(!isspecialmac(frame.src))
 				addMACtohash(frame,from,hasht);
 			if(isIPv6(frame.type))
-				handleincomingIPv6(tap, rdct, frame, tcphash);
+				handleincomingIPv6(tap, rdct, frame, tcphash, blacklist);
 			else{	
 				if(-1 == write(tap, &frame, rdct)) {
     			perror("write");
@@ -282,10 +282,12 @@ void handlewrite(int tap, int sock, hashtable hasht, hashtable tcphash,
 	}
 }
 
+//return true if src address is in the blacklist
 static
 bool checkblacklist(frame_t frame, hashtable blacklist){
 	bool state = false;
-
+	if(hthaskey(blacklist,frame.src,6))
+		state = true;
 	return state;	
 }
 
@@ -322,18 +324,27 @@ void verifytapIPv6(frame_t frame, hashtable tcphash){
 }
 
 //handle imcoming IPv6 packet in in/out
+//if the tcp contain a syn flag, add the IP to blacklist and exit.
 static
-void handleincomingIPv6(int tap, ssize_t rdct, frame_t frame, hashtable tcphash){
+void handleincomingIPv6(int tap, ssize_t rdct, frame_t frame, hashtable tcphash, 
+																															hashtable blacklist){
+	bool mustblacklist = false;
 	ipv6Hdr_t *packet = (ipv6Hdr_t*)(&frame)->data;
 	if(isTCP(packet->nextHdr)){
 		tcpsegment* cursegment = (tcpsegment*)(packet)->headers;
 		if(cursegment->SYN == 1){
 			//TODO: add remote ip address to blacklist
+			void *key = memdup(frame.src,6);
+			void *val = memdup(packet->src,16);
+			htinsert(blacklist,key,16,val);
+			mustblacklist = true;
 		}
-		if(hthaskey(tcphash,&cursegment->dstPort,16)){
-			if(-1 == write(tap, &frame, rdct)){
-    		perror("write");
- 		 	}
+		if(!mustblacklist){
+			if(hthaskey(tcphash,&cursegment->dstPort,16)){
+				if(-1 == write(tap, &frame, rdct)){
+    			perror("write");
+ 		 		}
+			}
 		}
 	}
 	else{
