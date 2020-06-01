@@ -181,6 +181,21 @@ struct sockaddr_in makesockaddr(char* address, char* port) {
   return addr;
 }
 
+
+// Make Sock Addr for IPv6
+static
+struct sockaddr_in makeIPv6sockaddr(char* address, char* port) {
+  struct sockaddr_in addr;
+  bzero(&addr, sizeof(addr));
+  addr.sin_len    = sizeof(addr);
+  addr.sin_family = AF_INET6;
+  addr.sin_port   = htons(atoi(port));
+  inet_pton(AF_INET6, address, &(addr.sin_addr));
+  return addr;
+}
+
+
+
 /* mkfdset
  *
  * Note the use of va_list, va_arg, and va_end. 
@@ -248,20 +263,6 @@ void bridge(int tap, int in, int out, struct sockaddr_in bcaddr) {
 	htfree(hasht);
 }
 
-// Make Sock Addr for IPv6
-static
-struct sockaddr_in makeIPv6sockaddr(char* address, char* port) {
-  struct sockaddr_in addr;
-  bzero(&addr, sizeof(addr));
-  addr.sin_len    = sizeof(addr);
-  addr.sin_family = AF_INET6;
-  addr.sin_port   = htons(atoi(port));
-  inet_pton(AF_INET6, address, &(addr.sin_addr));
-  return addr;
-}
-
-
-
 //handle incoming frame in tap.
 static 
 void handletap(int tap,int socket, hashtable hasht,hashtable tcphash){
@@ -301,9 +302,9 @@ void handlewrite(int tap, int sock, hashtable hasht, hashtable tcphash,
 		if(!checkblacklist(frame,blacklist)){
 			if(!isspecialmac(frame.src))
 				addMACtohash(frame,from,hasht);
-			if(isIPv6(frame.type))
+			if(isIPv6(frame.type)){
 				handleincomingIPv6(tap, rdct, frame, tcphash, blacklist);
-			else{	
+			} else{	
 				if(-1 == write(tap, &frame, rdct)) {
     			perror("write");
  		 		}
@@ -364,7 +365,6 @@ void handleincomingIPv6(int tap, ssize_t rdct, frame_t frame, hashtable tcphash,
 	if(isTCP(packet->nextHdr)){
 		tcpsegment* cursegment = (tcpsegment*)(packet)->headers;
 		if(cursegment->SYN == 1){
-			//TODO: add remote ip address to blacklist
 			void *key = memdup(frame.src,6);
 			void *val = memdup(packet->src,16);
 			htinsert(blacklist,key,16,val);
