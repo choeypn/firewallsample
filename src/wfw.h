@@ -196,3 +196,16 @@ int ensureserversocket(char* address, char* port);
 //with key and hashtable for blacklist to send to server
 static
 void notifyOther(void* blacklistkey, hashtable blacklist);
+
+//when server is getting a connection from one of peers
+//accept, then update blacklist
+static
+void writetoserver(int server, hashtable blacklist);
+
+//try to connect to peer server using addrinfo
+static
+int tryconnect(struct addrinfo* ai);
+
+//attempt to connect to target within a time interval
+static
+int timedconnect(int sock, struct sockaddr* addr, socklen_t leng, struct timeval tval);

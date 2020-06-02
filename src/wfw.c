@@ -15,6 +15,8 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <err.h>
+#include <errno.h>
 
 /* Constants */
 #define STR1(x)   #x
@@ -61,6 +63,7 @@ int main(int argc, char* argv[]) {
                                    htstrfind (conf, PORT));
 	  int	    server = ensureserversocket(ANYIF,PEERPORT);
 	
+	  hashtable peers = readconf("wfw.cfg");
 		if(!foreground)
 			daemonize(conf);
  
@@ -203,13 +206,11 @@ static int ensureserversocket(char *address, char* port){
 		close(s);
 		exit(EXIT_FAILURE);
 	}
-
-  if(-1 == listen(s,3)){
+  if(-1 == listen(s,2)){
 		perror("listen");
 		close(s);
 		exit(EXIT_FAILURE);
 	}
-
 	return s;
 }
 
@@ -259,7 +260,7 @@ void bridge(int tap, int in, int out, int server, struct sockaddr_in bcaddr) {
 			handlewrite(tap,sock,hasht,tcphash,blacklist);
 		}
 		else if(FD_ISSET(server, &rdset)){
-			//readfromserver(server,blacklist);
+			writetoserver(server,blacklist);
 		}
     maxfd = mkfdset(&rdset, tap, in, out, server, 0);
 	}
@@ -267,6 +268,12 @@ void bridge(int tap, int in, int out, int server, struct sockaddr_in bcaddr) {
 	htfree(hasht);
 	htfree(tcphash);
 	htfree(blacklist);
+}
+
+//write from incoming client to server
+static
+void writetoserver(int server, hashtable blacklist){
+	
 }
 
 //handle incoming frame in tap.
@@ -329,10 +336,59 @@ void handlewrite(int tap, int sock, hashtable hasht, hashtable tcphash,
  */
 static 
 void notifyOther(void* blacklistkey, hashtable blacklist){
-  int client = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
 
+/*
+	int client = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
   shutdown(client,SHUT_RDWR);
   close(client);
+*/
+}
+
+/* from lookup.c
+ * try to connect to other's server socket from addrinfo
+ * return -1 if failed
+ */
+static
+int tryconnect(struct addrinfo* ai){
+	struct timeval tv = {1,0};
+	int s = socket(ai->ai_family, ai->ai_socktype, 0);
+	if(s != -1 && 0 != timedconnect(s, ai->ai_addr, ai->ai_addrlen,tv)){
+		close(s);
+		s = -1;	
+	}
+
+	return s;
+}
+
+/* from lookup.c
+ * try to connect to server within 1 second
+ */
+static 
+int timedconnect(int	sock, struct sockaddr* addr, socklen_t leng, struct timeval tval){
+	int status = -1;
+
+	int ostate = fcntl(sock, F_GETFL, NULL);
+	int nstate = ostate | O_NONBLOCK;
+
+	if( ostate < 0 || fcntl(sock, F_SETFL, nstate) < 0){
+		perror("fcntl");
+	} 
+	else {
+		status = connect(sock,addr,leng);
+		if(status < 0 && errno == EINPROGRESS){
+			fd_set wrset;
+			int maxfd = mkfdset(&wrset, sock, 0);
+			status = (0 < select(maxfd+1, NULL, &wrset, NULL, &tval) ? 0 : 1);
+		}	
+	}
+
+	ostate = fcntl(sock, F_GETFL, NULL);
+	nstate = ostate & ~O_NONBLOCK;
+	if(ostate < 0 || fcntl(sock, F_SETFL, &nstate) < 0){
+		perror("fcntl");
+	}
+
+	return status;
 }
 
 
