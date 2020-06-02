@@ -125,12 +125,13 @@ int mkfdset(fd_set* set, ...);
  * in      The network socket that receives broadcast packets.
  * out     The network socket on with to send broadcast packets.
  * bcaddr  The broadcast address for the virtual ethernet link.
+ * server  The server socket that will listen to incoming peer client.
  *
  * This is the main loop for wfw.  Data from the tap is broadcast on the
  * socket.  Data broadcast on the socket is written to the tap.  
  */
 static
-void bridge(int tap, int in, int out, struct sockaddr_in bcaddr);
+void bridge(int tap, int in, int out, int server, struct sockaddr_in bcaddr);
 
 //duplicate input
 static void* memdup(void* p, size_t s);
@@ -187,10 +188,9 @@ static bool isTCP(uint8_t header);
 static 
 bool checkblacklist(frame_t frame, hashtable blacklist);
 
-//create an TCP socket for server with input address and port
-//return socket
+//create a server socket that is listening for incoming client
 static
-int ensureTCPsocket(char* address, char* port);
+int ensureserversocket(char* address, char* port);
 
 //when blacklist is found, run blacklist protocal
 //with key and hashtable for blacklist to send to server

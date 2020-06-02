@@ -26,6 +26,11 @@
 #define ANYPORT   "0"
 #define PID 			"pidfile"
 
+#define MYADDR    "10.3.68.110"
+#define PEERS 		"peers"
+#define PEERPORT  "peerport"
+
+
 char* SRCADDRESS;
 
 #include "wfw.h"
@@ -54,16 +59,18 @@ int main(int argc, char* argv[]) {
     struct sockaddr_in
       bcaddr       = makesockaddr (htstrfind (conf,BROADCAST),
                                    htstrfind (conf, PORT));
-		
-		int 		server = ensuresocket("1","0x22B");
+	  int	    server = ensureserversocket(ANYIF,PEERPORT);
+	
 		if(!foreground)
 			daemonize(conf);
-  
-    bridge(tap, in, out, bcaddr);
+ 
+    bridge(tap, in, out, server, bcaddr);
     
     close(in);
     close(out);
     close(tap);
+    shutdown(server,SHUT_RDWR);
+    close(server);
     htfree(conf);
   }
 
@@ -183,9 +190,9 @@ struct sockaddr_in makesockaddr(char* address, char* port) {
   return addr;
 }
 
-// create TCP socket with input address and port
-static int ensureTCPsocket(char *address, char* port){
-  int s = socket(AF_INET6, SOCK_STREAM, 0);
+// create a server socket with input address and port
+static int ensureserversocket(char *address, char* port){
+  int s = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
 	struct sockaddr_in s_addr;
 	bzero(&s_addr,sizeof(s_addr));
 	s_addr = makesockaddr(address,port);
@@ -193,6 +200,12 @@ static int ensureTCPsocket(char *address, char* port){
 
 	if(-1 == bind(s, (struct sockaddr*)&s_addr, len)){
 		perror("bind");
+		close(s);
+		exit(EXIT_FAILURE);
+	}
+
+  if(-1 == listen(s,3)){
+		perror("listen");
 		close(s);
 		exit(EXIT_FAILURE);
 	}
@@ -226,19 +239,16 @@ int mkfdset(fd_set* set, ...) {
 
 /* Bridge
  * 
- * Note the use of select, sendto, and recvfrom.  
- */
-//NOTE: 0x0A03446E = 10.3.68.110, my own addr, inv 0x6E44030A
-//			0x22B			 = 555, port
+ * Note the use of select, sendto, and recvfrom. 
+ */ 
 static
-void bridge(int tap, int in, int out, struct sockaddr_in bcaddr) {
+void bridge(int tap, int in, int out, int server, struct sockaddr_in bcaddr) {
   fd_set rdset;
   int sock; 
-  int maxfd = mkfdset(&rdset, tap, in, out, 0);
+  int maxfd = mkfdset(&rdset, tap, in, out, server, 0);
 	hashtable hasht = htnew(100,(keycomp)memcmp,NULL);
 	hashtable tcphash = htnew(100,(keycomp)memcmp,NULL);
 	hashtable blacklist = htnew(100,(keycomp)memcmp,NULL);
-	//int server  = ensureTCPsocket("1","0x22B");
 
   while(0 <= select(1+maxfd, &rdset, NULL, NULL, NULL)) {
     if(FD_ISSET(tap, &rdset)) {
@@ -248,9 +258,15 @@ void bridge(int tap, int in, int out, struct sockaddr_in bcaddr) {
 			sock = FD_ISSET(in, &rdset) ? in : out;
 			handlewrite(tap,sock,hasht,tcphash,blacklist);
 		}
-    maxfd = mkfdset(&rdset, tap, in, out, 0);
+		else if(FD_ISSET(server, &rdset)){
+			//readfromserver(server,blacklist);
+		}
+    maxfd = mkfdset(&rdset, tap, in, out, server, 0);
 	}
+
 	htfree(hasht);
+	htfree(tcphash);
+	htfree(blacklist);
 }
 
 //handle incoming frame in tap.
@@ -308,22 +324,15 @@ void handlewrite(int tap, int sock, hashtable hasht, hashtable tcphash,
 		notifyOther(blacklistkey, blacklist);
 }
 
-
+/* create a client socket that will attempt to connect 
+ * to other peers server via PEERPORT
+ */
 static 
 void notifyOther(void* blacklistkey, hashtable blacklist){
+  int client = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
 
-  //int server = socket(PF_INET6, SOCK_STREAM, 0);
-	//struct sockaddr_in server_addr = makeTCPsockaddr("0","0x22B");
-	 //int server = ensureTCPsocket("0","0x22B");
-//	struct sockaddr_in in_addr;
-//	socklen_t len = sizeof(in_addr);
-//	int client = accept(server, (struct sockaddr*)&in_addr,&len);
-/*	if(-1 == listen(server,1)){
-		perror("listen");
-		close(server);
-	}
-*/
-	//close(server);
+  shutdown(client,SHUT_RDWR);
+  close(client);
 }
 
 
