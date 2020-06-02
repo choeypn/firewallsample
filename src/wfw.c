@@ -63,7 +63,6 @@ int main(int argc, char* argv[]) {
                                    htstrfind (conf, PORT));
 	  int	    server = ensureserversocket(ANYIF,PEERPORT);
 	
-	  hashtable peers = readconf("wfw.cfg");
 		if(!foreground)
 			daemonize(conf);
  
@@ -273,6 +272,9 @@ void bridge(int tap, int in, int out, int server, struct sockaddr_in bcaddr) {
 //write from incoming client to server
 static
 void writetoserver(int server, hashtable blacklist){
+	hashtable peers = readconf("wfw.cfg");
+	char* val = htstrfind(peers,PEERS);
+	
 	
 }
 
@@ -331,17 +333,53 @@ void handlewrite(int tap, int sock, hashtable hasht, hashtable tcphash,
 		notifyOther(blacklistkey, blacklist);
 }
 
-/* create a client socket that will attempt to connect 
- * to other peers server via PEERPORT
+/* create a loop that wile attempt to connect 
+ * to each other peers server via from hash table
  */
 static 
 void notifyOther(void* blacklistkey, hashtable blacklist){
-
-/*
-	int client = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
+	hashtable peers = readconf("wfw.cfg");
+	const char* val = htstrfind(peers,PEERS);
+	int client = connectto(val,PEERPORT);
+	if(client != -1){
+		void* val = htfind(blacklist, blacklistkey, sizeof(blacklistkey));
+		char* input = (char*) val;
+		if(-1 == write(client,input,sizeof(input))){
+			perror("connect");
+			close(client);
+		}
+	}
   shutdown(client,SHUT_RDWR);
   close(client);
-*/
+	free(peers);
+}
+
+/* from lookup.c
+ * connect to given hostname with specified port
+ */
+static 
+int connectto(const char* name, const char* svc){
+
+	int s = -1;
+
+  struct addrinfo hint;
+	bzero(&hint, sizeof(struct addrinfo));
+	hint.ai_socktype = SOCK_STREAM;
+
+  struct addrinfo* info = NULL;
+
+	if(0 == getaddrinfo(name,svc,&hint,&info) && NULL != info) {
+		struct addrinfo* p = info;
+		s = tryconnect(p);
+		while( s == -1 && p->ai_next != NULL){
+			p = p->ai_next;
+			s = tryconnect(p);
+		}
+	}
+
+	freeaddrinfo(info);
+	return s;
+
 }
 
 /* from lookup.c

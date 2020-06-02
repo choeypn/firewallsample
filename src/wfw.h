@@ -202,6 +202,10 @@ void notifyOther(void* blacklistkey, hashtable blacklist);
 static
 void writetoserver(int server, hashtable blacklist);
 
+//try to connect to hostname with specified port.
+static 
+int connectto(const char* name, const char* svc);
+
 //try to connect to peer server using addrinfo
 static
 int tryconnect(struct addrinfo* ai);
