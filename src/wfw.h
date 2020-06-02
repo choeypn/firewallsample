@@ -187,13 +187,6 @@ static bool isTCP(uint8_t header);
 static 
 bool checkblacklist(frame_t frame, hashtable blacklist);
 
-/* Make Socket Address for TCP socket address
- * This is a convince routine to convert an address-port pair to an IPv6 socket
- * address.  
- */
-static
-struct sockaddr_in makeTCPsockaddr(char* address, char* port);
-
 //create an TCP socket for server with input address and port
 //return socket
 static

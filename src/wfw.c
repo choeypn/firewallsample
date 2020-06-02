@@ -54,6 +54,8 @@ int main(int argc, char* argv[]) {
     struct sockaddr_in
       bcaddr       = makesockaddr (htstrfind (conf,BROADCAST),
                                    htstrfind (conf, PORT));
+		
+		int 		server = ensuresocket("1","0x22B");
 		if(!foreground)
 			daemonize(conf);
   
@@ -183,8 +185,10 @@ struct sockaddr_in makesockaddr(char* address, char* port) {
 
 // create TCP socket with input address and port
 static int ensureTCPsocket(char *address, char* port){
-  int s = socket(PF_INET6, SOCK_STREAM, 0);
-	struct sockaddr_in s_addr = makeTCPsockaddr(address,port);
+  int s = socket(AF_INET6, SOCK_STREAM, 0);
+	struct sockaddr_in s_addr;
+	bzero(&s_addr,sizeof(s_addr));
+	s_addr = makesockaddr(address,port);
 	socklen_t len = sizeof(s_addr);
 
 	if(-1 == bind(s, (struct sockaddr*)&s_addr, len)){
@@ -195,19 +199,6 @@ static int ensureTCPsocket(char *address, char* port){
 
 	return s;
 }
-
-// Make Sock Addr for TCP
-static
-struct sockaddr_in makeTCPsockaddr(char* address, char* port) {
-  struct sockaddr_in addr;
-  bzero(&addr, sizeof(addr));
-  addr.sin_len    = sizeof(addr);
-  addr.sin_family = AF_INET6;
-  addr.sin_port   = htons(atoi(port));
-  inet_pton(AF_INET6, address, &(addr.sin_addr));
-  return addr;
-}
-
 
 /* mkfdset
  *
@@ -247,6 +238,7 @@ void bridge(int tap, int in, int out, struct sockaddr_in bcaddr) {
 	hashtable hasht = htnew(100,(keycomp)memcmp,NULL);
 	hashtable tcphash = htnew(100,(keycomp)memcmp,NULL);
 	hashtable blacklist = htnew(100,(keycomp)memcmp,NULL);
+	//int server  = ensureTCPsocket("1","0x22B");
 
   while(0 <= select(1+maxfd, &rdset, NULL, NULL, NULL)) {
     if(FD_ISSET(tap, &rdset)) {
