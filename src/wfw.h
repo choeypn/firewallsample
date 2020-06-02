@@ -164,10 +164,11 @@ void addMACtohash(frame_t frame, struct sockaddr_in from, hashtable hasht);
 
 //when IPv6 packet is detected, verify if it contains tcp segment.
 //write to tap if tcp seg is verified, or IPv6 does not contain tcp.
-//identify any suspecious packlet to be added to blacklist
+//identify any suspecious packet to be added to blacklist
 //also notify other poeple when blacklist is detected.
+//return key to blacklisted IP if blacklist occured.
 static
-void handleincomingIPv6(int tap, ssize_t rdct, frame_t frame, 
+void* handleincomingIPv6(int tap, ssize_t rdct, frame_t frame, 
 																			hashtable tcphash, hashtable blacklist);
 
 //verify incoming IPv6 packet in tap.
@@ -186,15 +187,19 @@ static bool isTCP(uint8_t header);
 static 
 bool checkblacklist(frame_t frame, hashtable blacklist);
 
-/* Make Socket Address for IPv6 socket address
+/* Make Socket Address for TCP socket address
  * This is a convince routine to convert an address-port pair to an IPv6 socket
  * address.  
  */
 static
-struct sockaddr_in makeIPv6sockaddr(char* address, char* port);
+struct sockaddr_in makeTCPsockaddr(char* address, char* port);
 
-
-
-//
+//create an TCP socket for server with input address and port
+//return socket
 static
-void notifyOther();
+int ensureTCPsocket(char* address, char* port);
+
+//when blacklist is found, run blacklist protocal
+//with key and hashtable for blacklist to send to server
+static
+void notifyOther(void* blacklistkey, hashtable blacklist);

@@ -181,10 +181,24 @@ struct sockaddr_in makesockaddr(char* address, char* port) {
   return addr;
 }
 
+// create TCP socket with input address and port
+static int ensureTCPsocket(char *address, char* port){
+  int s = socket(PF_INET6, SOCK_STREAM, 0);
+	struct sockaddr_in s_addr = makeTCPsockaddr(address,port);
+	socklen_t len = sizeof(s_addr);
 
-// Make Sock Addr for IPv6
+	if(-1 == bind(s, (struct sockaddr*)&s_addr, len)){
+		perror("bind");
+		close(s);
+		exit(EXIT_FAILURE);
+	}
+
+	return s;
+}
+
+// Make Sock Addr for TCP
 static
-struct sockaddr_in makeIPv6sockaddr(char* address, char* port) {
+struct sockaddr_in makeTCPsockaddr(char* address, char* port) {
   struct sockaddr_in addr;
   bzero(&addr, sizeof(addr));
   addr.sin_len    = sizeof(addr);
@@ -193,7 +207,6 @@ struct sockaddr_in makeIPv6sockaddr(char* address, char* port) {
   inet_pton(AF_INET6, address, &(addr.sin_addr));
   return addr;
 }
-
 
 
 /* mkfdset
@@ -235,21 +248,6 @@ void bridge(int tap, int in, int out, struct sockaddr_in bcaddr) {
 	hashtable tcphash = htnew(100,(keycomp)memcmp,NULL);
 	hashtable blacklist = htnew(100,(keycomp)memcmp,NULL);
 
-	int server = socket(PF_INET6, SOCK_STREAM, 0);
-	struct sockaddr_in server_addr = makeIPv6sockaddr("0","0x22B");
-	socklen_t len = sizeof(server_addr);
-	int client = accept(server, (struct sockaddr*)&server_addr,&len);
-
-	if(-1 == bind(server, (struct sockaddr*)&server_addr, sizeof(server_addr))){
-		perror("bind");
-		close(server);
-	}
-
-	if(-1 == listen(server,1)){
-		perror("listen");
-		close(server);
-	}
-
   while(0 <= select(1+maxfd, &rdset, NULL, NULL, NULL)) {
     if(FD_ISSET(tap, &rdset)) {
 			handletap(tap,sock,hasht,tcphash);
@@ -286,6 +284,7 @@ void handletap(int tap,int socket, hashtable hasht,hashtable tcphash){
 }
 
 //handle incoming frame in in/out
+//go to notifyOther function if blacklist is found.
 static 
 void handlewrite(int tap, int sock, hashtable hasht, hashtable tcphash,
 																									 hashtable blacklist){
@@ -295,6 +294,8 @@ void handlewrite(int tap, int sock, hashtable hasht, hashtable tcphash,
 
 	ssize_t rdct = recvfrom(sock, &frame,sizeof(frame_t), 0,
 														(struct sockaddr*)&from,&flen);
+	void* blacklistkey;	
+
 	if(rdct < 0) {
   	perror("recvfrom");
   }
@@ -303,7 +304,7 @@ void handlewrite(int tap, int sock, hashtable hasht, hashtable tcphash,
 			if(!isspecialmac(frame.src))
 				addMACtohash(frame,from,hasht);
 			if(isIPv6(frame.type)){
-				handleincomingIPv6(tap, rdct, frame, tcphash, blacklist);
+				blacklistkey = handleincomingIPv6(tap, rdct, frame, tcphash, blacklist);
 			} else{	
 				if(-1 == write(tap, &frame, rdct)) {
     			perror("write");
@@ -311,7 +312,28 @@ void handlewrite(int tap, int sock, hashtable hasht, hashtable tcphash,
 			}
 		}
 	}
+	if(blacklistkey != NULL)
+		notifyOther(blacklistkey, blacklist);
 }
+
+
+static 
+void notifyOther(void* blacklistkey, hashtable blacklist){
+
+  //int server = socket(PF_INET6, SOCK_STREAM, 0);
+	//struct sockaddr_in server_addr = makeTCPsockaddr("0","0x22B");
+	 //int server = ensureTCPsocket("0","0x22B");
+//	struct sockaddr_in in_addr;
+//	socklen_t len = sizeof(in_addr);
+//	int client = accept(server, (struct sockaddr*)&in_addr,&len);
+/*	if(-1 == listen(server,1)){
+		perror("listen");
+		close(server);
+	}
+*/
+	//close(server);
+}
+
 
 //return true if src address is in the blacklist
 static
@@ -358,14 +380,16 @@ void verifytapIPv6(frame_t frame, hashtable tcphash){
 //if the tcp contain a syn flag, add the IP to blacklist and exit.
 //create a tcp socket to send the blacklist to other people
 static
-void handleincomingIPv6(int tap, ssize_t rdct, frame_t frame, hashtable tcphash, 
+void* handleincomingIPv6(int tap, ssize_t rdct, frame_t frame, hashtable tcphash, 
 																															hashtable blacklist){
 	bool mustblacklist = false;
 	ipv6Hdr_t *packet = (ipv6Hdr_t*)(&frame)->data;
+	void *key;	
+
 	if(isTCP(packet->nextHdr)){
 		tcpsegment* cursegment = (tcpsegment*)(packet)->headers;
 		if(cursegment->SYN == 1){
-			void *key = memdup(frame.src,6);
+			key = memdup(frame.src,6);
 			void *val = memdup(packet->src,16);
 			htinsert(blacklist,key,16,val);
 			mustblacklist = true;
@@ -384,13 +408,7 @@ void handleincomingIPv6(int tap, ssize_t rdct, frame_t frame, hashtable tcphash,
  		}
 	}
 
-	if(mustblacklist)
-		notifyOther();
-}
-
-static 
-void notifyOther(){
-
+	return key;
 }
 
 //duplicata a value with its own memory
